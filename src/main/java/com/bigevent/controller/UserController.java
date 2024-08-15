@@ -9,12 +9,15 @@ import com.bigevent.utils.ThreadLocalUtil;
 import jakarta.validation.constraints.Pattern;
 import org.hibernate.validator.constraints.URL;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController //表明其为请求处理类
 @RequestMapping("/user")
@@ -23,6 +26,8 @@ public class UserController {
 
     @Autowired //要用service层的方法，所以要先注入service层的对象
     private UserService userService;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     //注册
     @PostMapping("/register")
@@ -53,6 +58,9 @@ public class UserController {
             claims.put("id", loginUser.getId());
             claims.put("username", loginUser.getUsername());
             String token = JwtUtil.genToken(claims);
+            //把token存储到redis中
+            ValueOperations<String, String> ops = stringRedisTemplate.opsForValue();
+            ops.set(token, token, 1, TimeUnit.HOURS);
             return Result.success(token);
         }
         return Result.error("密码错误");
@@ -87,7 +95,7 @@ public class UserController {
 
     //更新密码
     @PatchMapping("/updatePwd")
-    public Result updatePwd(@RequestBody Map<String, String> params){
+    public Result updatePwd(@RequestBody Map<String, String> params, @RequestHeader(name = "Authorization") String token){
         //校验参数
         String oldPwd = params.get("old_pwd");
         String newPwd = params.get("new_pwd");
@@ -106,8 +114,10 @@ public class UserController {
         if (!newPwd.equals(rePwd)){
             return Result.error("两次密码不一致");
         }
-        System.out.println(Md5Util.getMD5String(oldPwd));
         userService.updatePwd(newPwd);
+        //删除redis对应的token
+        ValueOperations<String, String> ops = stringRedisTemplate.opsForValue();
+        ops.getOperations().delete(token);
         return Result.success();
     }
 
