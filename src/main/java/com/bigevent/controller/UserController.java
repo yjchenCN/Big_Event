@@ -114,10 +114,12 @@ public class UserController {
         if (!newPwd.equals(rePwd)){
             return Result.error("两次密码不一致");
         }
+
         userService.updatePwd(newPwd);
         //删除redis对应的token
         ValueOperations<String, String> ops = stringRedisTemplate.opsForValue();
         ops.getOperations().delete(token);
+
         return Result.success();
     }
 
